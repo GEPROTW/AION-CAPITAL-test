@@ -6,6 +6,8 @@
 #property link      ""
 #property version   "1.01"
 
+#include <Generic\HashMap.mqh>
+
 input string FirebaseProjectId = "cultivated-buckeye-vcf5x"; // Firebase Project ID
 input string DatabaseId = "ai-studio-17650b85-623c-4900-bca4-05c721c83378"; // Firestore Database ID (often "(default)")
 input string WebApiKey = "AIzaSyDMYR1VPwgFaU8zaF_6m1_JtMzEszVQj0g";         // Firebase Web API Key
@@ -21,6 +23,7 @@ string RECORD_FILE = "FirebaseUploader_Record.txt";
 double g_peak_equity = 0;
 double g_max_drawdown_val = 0;
 double g_max_drawdown_pct = 0;
+double g_avg_hold_seconds = 0;
 bool g_stats_needs_upload = true;
 
 //+------------------------------------------------------------------+
@@ -320,7 +323,35 @@ void CalcHistoricalDrawdown()
    g_max_drawdown_val = max_dd_val;
    g_max_drawdown_pct = max_dd_pct;
    
-   Print("Hist DD% calculated: ", g_max_drawdown_pct);
+   double total_hold_seconds = 0;
+   int hold_count = 0;
+   CHashMap<long, datetime> pos_in_times;
+   
+   for(int i=0; i<total; i++) {
+      ulong tckt = HistoryDealGetTicket(i);
+      long entry = HistoryDealGetInteger(tckt, DEAL_ENTRY);
+      long pos_id = HistoryDealGetInteger(tckt, DEAL_POSITION_ID);
+      datetime dt = (datetime)HistoryDealGetInteger(tckt, DEAL_TIME);
+      
+      if(entry == DEAL_ENTRY_IN) {
+         datetime existing_time = 0;
+         if(!pos_in_times.TryGetValue(pos_id, existing_time)) {
+            pos_in_times.Add(pos_id, dt);
+         }
+      } else if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_INOUT || entry == DEAL_ENTRY_OUT_BY) {
+         datetime time_in = 0;
+         if(pos_in_times.TryGetValue(pos_id, time_in)) {
+            if(dt > time_in) {
+               total_hold_seconds += (double)(dt - time_in);
+               hold_count++;
+            }
+         }
+      }
+   }
+   if(hold_count > 0) g_avg_hold_seconds = total_hold_seconds / hold_count;
+   else g_avg_hold_seconds = 0;
+   
+   Print("Hist DD% calculated: ", g_max_drawdown_pct, " AvgHold: ", g_avg_hold_seconds);
   }
 
 //+------------------------------------------------------------------+
@@ -364,12 +395,20 @@ void UploadAccountStats()
    string url = "https://firestore.googleapis.com/v1/projects/" + FirebaseProjectId + "/databases/" + dbId + "/documents/accounts/" + docId + "?key=" + WebApiKey;
    string headers = "Content-Type: application/json\r\n";
    
+   string broker = AccountInfoString(ACCOUNT_COMPANY);
+   string server = AccountInfoString(ACCOUNT_SERVER);
+   StringReplace(broker, "\"", "\\\"");
+   StringReplace(server, "\"", "\\\"");
+
    // Build the Firestore Document JSON format
    string json = "{";
    json += "\"fields\": {";
    json += "\"account\": {\"integerValue\": \"" + IntegerToString(account) + "\"},";
    json += "\"maxDrawdown\": {\"doubleValue\": " + DoubleToString(g_max_drawdown_val, 2) + "},";
-   json += "\"maxDrawdownPct\": {\"doubleValue\": " + DoubleToString(g_max_drawdown_pct, 4) + "\}";
+   json += "\"maxDrawdownPct\": {\"doubleValue\": " + DoubleToString(g_max_drawdown_pct, 4) + "},";
+   json += "\"broker\": {\"stringValue\": \"" + broker + "\"},";
+   json += "\"server\": {\"stringValue\": \"" + server + "\"},";
+   json += "\"avgHoldSeconds\": {\"doubleValue\": " + DoubleToString(g_avg_hold_seconds, 0) + "}";
    json += "}"; // end fields
    json += "}"; // end doc
 

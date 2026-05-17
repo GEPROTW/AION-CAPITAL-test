@@ -1237,11 +1237,11 @@ export default function App() {
                   </div>
                   <div className="flex justify-between items-center group">
                     <span className="font-mono text-[13px] text-dim group-hover:text-bright transition-colors">{t('broker')}</span>
-                    <span className="font-mono text-[14px] text-muted">{settings.links?.broker ? 'Custom Broker' : t('notAvailable')}</span>
+                    <span className="font-mono text-[14px] text-muted">{accountStatsMap[selectedAccount]?.broker || settings.links?.broker || t('notAvailable')}</span>
                   </div>
                   <div className="flex justify-between items-center group">
                     <span className="font-mono text-[13px] text-dim group-hover:text-bright transition-colors">{t('server')}</span>
-                    <span className="font-mono text-[14px] text-muted">{t('notAvailable')}</span>
+                    <span className="font-mono text-[14px] text-muted">{accountStatsMap[selectedAccount]?.server || t('notAvailable')}</span>
                   </div>
                 </div>
               </div>
@@ -1323,7 +1323,11 @@ export default function App() {
                   </div>
                   <div className="flex justify-between items-center group">
                     <span className="font-mono text-[13px] text-dim group-hover:text-bright transition-colors">{t('avgHoldTime')}</span>
-                    <span className="font-mono text-[14px] text-muted tabular-nums">{t('notAvailable')}</span>
+                    <span className="font-mono text-[14px] text-muted tabular-nums">
+                      {accountStatsMap[selectedAccount]?.avgHoldSeconds ? (
+                        `${Math.floor(accountStatsMap[selectedAccount].avgHoldSeconds! / 3600)}h ${Math.floor((accountStatsMap[selectedAccount].avgHoldSeconds! % 3600) / 60)}m`
+                      ) : t('notAvailable')}
+                    </span>
                   </div>
                 </div>
               </div>
