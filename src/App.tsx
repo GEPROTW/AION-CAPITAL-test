@@ -325,7 +325,7 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>({ title: '', logoUrl: '' });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tempSettings, setTempSettings] = useState<AppSettings>({ title: '', logoUrl: '' });
-  const [accountStatsMap, setAccountStatsMap] = useState<Record<string, { maxDrawdownPct: number, maxDrawdownVal: number }>>({});
+  const [accountStatsMap, setAccountStatsMap] = useState<Record<string, { maxDrawdownPct: number, maxDrawdownVal: number, broker?: string, server?: string, avgHoldSeconds?: number }>>({});
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
   const [mainTab, setMainTab] = useState<'history' | 'simulation'>('history');
@@ -436,13 +436,16 @@ export default function App() {
     const unsubAccounts = onSnapshot(
       q,
       (snapshot) => {
-        const stats: Record<string, { maxDrawdownPct: number, maxDrawdownVal: number }> = {};
+        const stats: Record<string, { maxDrawdownPct: number, maxDrawdownVal: number, broker?: string, server?: string, avgHoldSeconds?: number }> = {};
         snapshot.forEach(docSnap => {
           const data = docSnap.data();
           if (data && data.account) {
             stats[data.account.toString()] = {
               maxDrawdownPct: data.maxDrawdownPct || 0,
-              maxDrawdownVal: data.maxDrawdown || 0
+              maxDrawdownVal: data.maxDrawdown || 0,
+              broker: data.broker,
+              server: data.server,
+              avgHoldSeconds: data.avgHoldSeconds
             };
           }
         });
@@ -1324,7 +1327,7 @@ export default function App() {
                   <div className="flex justify-between items-center group">
                     <span className="font-mono text-[13px] text-dim group-hover:text-bright transition-colors">{t('avgHoldTime')}</span>
                     <span className="font-mono text-[14px] text-muted tabular-nums">
-                      {accountStatsMap[selectedAccount]?.avgHoldSeconds ? (
+                      {accountStatsMap[selectedAccount]?.avgHoldSeconds != null ? (
                         `${Math.floor(accountStatsMap[selectedAccount].avgHoldSeconds! / 3600)}h ${Math.floor((accountStatsMap[selectedAccount].avgHoldSeconds! % 3600) / 60)}m`
                       ) : t('notAvailable')}
                     </span>
