@@ -321,14 +321,9 @@ export default function App() {
   const [timeframe, setTimeframe] = useState<Timeframe>('DAY');
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null); // Kept state variable signature for code consistency
   const [settings, setSettings] = useState<AppSettings>({ title: '', logoUrl: '' });
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
   const [tempSettings, setTempSettings] = useState<AppSettings>({ title: '', logoUrl: '' });
   const [accountStatsMap, setAccountStatsMap] = useState<Record<string, { maxDrawdownPct: number, maxDrawdownVal: number }>>({});
   const [selectedAccount, setSelectedAccount] = useState<string>('');
@@ -418,12 +413,7 @@ export default function App() {
     return deals.filter(d => d.account?.toString() === selectedAccount);
   }, [deals, selectedAccount]);
 
-  useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
-    return () => unsubAuth();
-  }, []);
+// Removed auth listener for temporary public access overrides
 
   useEffect(() => {
     const unsubSettings = onSnapshot(
@@ -441,8 +431,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'accounts'), where('ownerId', '==', user.uid));
+    // Open query for all accounts since we removed login constraint
+    const q = collection(db, 'accounts');
     const unsubAccounts = onSnapshot(
       q,
       (snapshot) => {
@@ -463,21 +453,7 @@ export default function App() {
       }
     );
     return () => unsubAccounts();
-  }, [user]);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      setShowLoginModal(false);
-      setEmail('');
-      setPassword('');
-      setShowSettingsModal(true); // Open settings right away on successful login
-    } catch (err: any) {
-      setLoginError(err.message || '登入失敗');
-    }
-  };
+  }, []);
 
   const handleSaveSettings = async () => {
     try {
@@ -1135,25 +1111,21 @@ export default function App() {
             <div className="flex items-center justify-start md:justify-end gap-1.5 font-mono text-[9px] md:text-[11px] tracking-[0.12em] text-muted uppercase opacity-70">
               <span 
                 onClick={() => {
-                  if (user) {
-                    const detectedAccounts = new Set(deals.filter(d => d.account != null).map(d => d.account!.toString()));
-                    let initialAccounts: Record<string, AccountConfig> = { ...settings.accounts };
-                    let orderCounter = Object.keys(initialAccounts).length;
-                    detectedAccounts.forEach((accStr: string) => {
-                      if (!initialAccounts[accStr]) {
-                        initialAccounts[accStr] = {
-                          account: parseInt(accStr, 10),
-                          label: accStr,
-                          isHidden: false,
-                          order: orderCounter++
-                        };
-                      }
-                    });
-                    setTempSettings({ title: settings.title || '', logoUrl: settings.logoUrl || '', accounts: initialAccounts, links: settings.links || {} });
-                    setShowSettingsModal(true);
-                  } else {
-                    setShowLoginModal(true);
-                  }
+                  const detectedAccounts = new Set(deals.filter(d => d.account != null).map(d => d.account!.toString()));
+                  let initialAccounts: Record<string, AccountConfig> = { ...settings.accounts };
+                  let orderCounter = Object.keys(initialAccounts).length;
+                  detectedAccounts.forEach((accStr: string) => {
+                    if (!initialAccounts[accStr]) {
+                      initialAccounts[accStr] = {
+                        account: parseInt(accStr, 10),
+                        label: accStr,
+                        isHidden: false,
+                        order: orderCounter++
+                      };
+                    }
+                  });
+                  setTempSettings({ title: settings.title || '', logoUrl: settings.logoUrl || '', accounts: initialAccounts, links: settings.links || {} });
+                  setShowSettingsModal(true);
                 }}
                 className={`w-1.5 h-1.5 rounded-full cursor-pointer hover:scale-150 transition-transform shadow-[0_0_6px_var(--color-green-neon)] ${loading ? 'bg-gold animate-pulse shadow-[0_0_6px_var(--color-gold)]' : 'bg-green-neon'}`} 
               />
@@ -2000,44 +1972,7 @@ export default function App() {
           </div>
         </footer>
 
-        {/* LOGIN MODAL */}
-        {showLoginModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <div className="bg-ink-2 border border-wire rounded-xl shadow-xl w-full max-w-[400px] p-5 sm:p-8 relative">
-              <button 
-                onClick={() => setShowLoginModal(false)}
-                className="absolute top-4 right-4 text-dim hover:text-bright"
-              >✕</button>
-              <h2 className="font-display text-xl text-bright mb-6 tracking-wide">{t('adminLogin')}</h2>
-              <form onSubmit={handleLogin} className="flex flex-col gap-4">
-                <div>
-                  <label className="block font-mono text-[12px] tracking-[0.1em] text-muted mb-2">Email</label>
-                  <input 
-                    type="email" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-ink-3 border border-wire rounded-lg px-3 py-2 font-mono text-[14px] text-body focus:outline-none focus:ring-2 focus:ring-cyan-glow/30"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-mono text-[12px] tracking-[0.1em] text-muted mb-2">Password</label>
-                  <input 
-                    type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-ink-3 border border-wire rounded-lg px-3 py-2 font-mono text-[14px] text-body focus:outline-none focus:ring-2 focus:ring-cyan-glow/30"
-                    required
-                  />
-                </div>
-                {loginError && <div className="text-red-neon text-xs font-sans mt-1">{loginError}</div>}
-                <button type="submit" className="mt-2 w-full py-2.5 rounded-lg bg-cyan-glow text-white font-mono text-[14px] tracking-wide hover:opacity-90 transition-opacity">
-                  {t('login')}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
+        {/* LOGIN MODAL REMOVED FOR TEMPORARY PUBLIC ACCESS */}
 
         {/* SETTINGS MODAL */}
         {showSettingsModal && (
@@ -2049,16 +1984,6 @@ export default function App() {
               >✕</button>
               <h2 className="font-display text-xl text-bright mb-6 tracking-wide flex items-center justify-between shrink-0">
                 <div>{t('settings')}</div>
-                <button 
-                  onClick={() => {
-                    signOut(auth);
-                    setShowSettingsModal(false);
-                    setUser(null);
-                  }}
-                  className="font-mono text-[12px] text-red-neon border border-red-neon/30 px-2 py-1 hover:bg-red-neon/10 transition-colors"
-                >
-                  {t('logout')}
-                </button>
               </h2>
               <div className="flex flex-col gap-4 overflow-y-auto pr-2 pb-2 flex-1">
                 <div>

@@ -6,11 +6,9 @@
 #property link      ""
 #property version   "1.01"
 
-input string FirebaseProjectId = ""; // Firebase Project ID
-input string DatabaseId = "(default)"; // Firestore Database ID (often "(default)")
-input string WebApiKey = "";         // Firebase Web API Key
-input string UserEmail = "";         // Firebase User Email
-input string UserPassword = "";      // Firebase User Password
+input string FirebaseProjectId = "cultivated-buckeye-vcf5x"; // Firebase Project ID
+input string DatabaseId = "ai-studio-17650b85-623c-4900-bca4-05c721c83378"; // Firestore Database ID (often "(default)")
+input string WebApiKey = "AIzaSyDMYR1VPwgFaU8zaF_6m1_JtMzEszVQj0g";         // Firebase Web API Key
 input int UploadIntervalSeconds = 60; // Upload Check Interval (seconds)
 
 string idToken = "";
@@ -30,18 +28,10 @@ bool g_stats_needs_upload = true;
 //+------------------------------------------------------------------+
 int OnInit()
   {
-   if(FirebaseProjectId == "" || WebApiKey == "" || UserEmail == "" || UserPassword == "") {
+   if(FirebaseProjectId == "" || WebApiKey == "") {
       Print("Please fill in all Firebase inputs.");
       return INIT_PARAMETERS_INCORRECT;
    }
-
-   // 1. Authenticate with Firebase Email/Password
-   if(!Authenticate()) {
-      Print("Authentication failed.");
-      return INIT_FAILED;
-   }
-   
-   Print("Authenticated successfully! UID: ", localId);
 
    // Create Force Reupload Button
    ObjectCreate(0, "BtnForceUpload", OBJ_BUTTON, 0, 0, 0);
@@ -219,47 +209,6 @@ void SyncDeals()
   }
 
 //+------------------------------------------------------------------+
-//| Authenticate via Firebase Auth REST API                          |
-//+------------------------------------------------------------------+
-bool Authenticate()
-  {
-   string url = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + WebApiKey;
-   string headers = "Content-Type: application/json\r\n";
-   string payload = "{\"email\":\"" + UserEmail + "\",\"password\":\"" + UserPassword + "\",\"returnSecureToken\":true}";
-   
-   char postData[];
-   char result[];
-   string resultHeaders;
-   StringToCharArray(payload, postData, 0, StringLen(payload), CP_UTF8);
-   
-   int res = WebRequest("POST", url, headers, 10000, postData, result, resultHeaders);
-   
-   if(res == 200) {
-      string jsonRes = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
-      
-      // Simple string parsing to extract idToken and localId (Since MQL5 doesn't have native JSON easily)
-      int tokenIdx = StringFind(jsonRes, "\"idToken\": \"");
-      if(tokenIdx != -1) {
-         tokenIdx += 12;
-         int tokenEnd = StringFind(jsonRes, "\"", tokenIdx);
-         idToken = StringSubstr(jsonRes, tokenIdx, tokenEnd - tokenIdx);
-      }
-      
-      int uidIdx = StringFind(jsonRes, "\"localId\": \"");
-      if(uidIdx != -1) {
-         uidIdx += 12;
-         int uidEnd = StringFind(jsonRes, "\"", uidIdx);
-         localId = StringSubstr(jsonRes, uidIdx, uidEnd - uidIdx);
-      }
-      return (idToken != "" && localId != "");
-   } else {
-      Print("WebRequest failed, code: ", res, " error: ", GetLastError());
-      Print("Response: ", CharArrayToString(result));
-      return false;
-   }
-  }
-
-//+------------------------------------------------------------------+
 //| Upload a single deal to Firestore                                |
 //+------------------------------------------------------------------+
 bool UploadDeal(ulong ticket)
@@ -280,8 +229,8 @@ bool UploadDeal(ulong ticket)
    long account = AccountInfoInteger(ACCOUNT_LOGIN);
    string docId = IntegerToString(account) + "_" + IntegerToString(ticket);
 
-   string url = "https://firestore.googleapis.com/v1/projects/" + FirebaseProjectId + "/databases/" + dbId + "/documents/deals/" + docId;
-   string headers = "Authorization: Bearer " + idToken + "\r\n";
+   string url = "https://firestore.googleapis.com/v1/projects/" + FirebaseProjectId + "/databases/" + dbId + "/documents/deals/" + docId + "?key=" + WebApiKey;
+   string headers = "Content-Type: application/json\r\n";
    
    // Build the Firestore Document JSON format
    string json = "{";
@@ -300,9 +249,8 @@ bool UploadDeal(ulong ticket)
    json += "\"isPublic\": {\"booleanValue\": true},";
    
    long updated_at = (long)TimeCurrent() * 1000;
-   json += "\"updatedAt\": {\"integerValue\": \"" + IntegerToString(updated_at) + "\"},";
+   json += "\"updatedAt\": {\"integerValue\": \"" + IntegerToString(updated_at) + "\"}";
    
-   json += "\"ownerId\": {\"stringValue\": \"" + localId + "\"}";
    json += "}"; // end fields
    json += "}"; // end doc
 
@@ -312,14 +260,6 @@ bool UploadDeal(ulong ticket)
    StringToCharArray(json, postData, 0, StringLen(json), CP_UTF8);
    
    int res = WebRequest("PATCH", url, headers, 10000, postData, result, resultHeaders);
-   
-   if(res == 401) {
-      Print("Token expired (401). Attempting to re-authenticate...");
-      if(Authenticate()) {
-         headers = "Authorization: Bearer " + idToken + "\r\n";
-         res = WebRequest("PATCH", url, headers, 10000, postData, result, resultHeaders);
-      }
-   }
    
    if(res == 200) {
       Print("Deal ", ticket, " uploaded.");
@@ -421,16 +361,15 @@ void UploadAccountStats()
    long account = AccountInfoInteger(ACCOUNT_LOGIN);
    string docId = IntegerToString(account) + "_stats";
 
-   string url = "https://firestore.googleapis.com/v1/projects/" + FirebaseProjectId + "/databases/" + dbId + "/documents/accounts/" + docId;
-   string headers = "Authorization: Bearer " + idToken + "\r\n";
+   string url = "https://firestore.googleapis.com/v1/projects/" + FirebaseProjectId + "/databases/" + dbId + "/documents/accounts/" + docId + "?key=" + WebApiKey;
+   string headers = "Content-Type: application/json\r\n";
    
    // Build the Firestore Document JSON format
    string json = "{";
    json += "\"fields\": {";
    json += "\"account\": {\"integerValue\": \"" + IntegerToString(account) + "\"},";
    json += "\"maxDrawdown\": {\"doubleValue\": " + DoubleToString(g_max_drawdown_val, 2) + "},";
-   json += "\"maxDrawdownPct\": {\"doubleValue\": " + DoubleToString(g_max_drawdown_pct, 4) + "},";
-   json += "\"ownerId\": {\"stringValue\": \"" + localId + "\"}";
+   json += "\"maxDrawdownPct\": {\"doubleValue\": " + DoubleToString(g_max_drawdown_pct, 4) + "\}";
    json += "}"; // end fields
    json += "}"; // end doc
 
@@ -440,14 +379,6 @@ void UploadAccountStats()
    StringToCharArray(json, postData, 0, StringLen(json), CP_UTF8);
    
    int res = WebRequest("PATCH", url, headers, 10000, postData, result, resultHeaders);
-   
-   if(res == 401) {
-      Print("Token expired (401). Attempting to re-authenticate...");
-      if(Authenticate()) {
-         headers = "Authorization: Bearer " + idToken + "\r\n";
-         res = WebRequest("PATCH", url, headers, 10000, postData, result, resultHeaders);
-      }
-   }
    
    if(res == 200) {
       Print("Account stats uploaded successfully.");
